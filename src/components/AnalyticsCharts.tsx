@@ -4,6 +4,7 @@ import { CategorySummary, formatCurrency } from '../utils/formatters';
 import { CategoryDonutChart } from './charts/CategoryDonutChart';
 import { BudgetVarianceBarChart } from './charts/BudgetVarianceBarChart';
 import { CashFlowTrendChart } from './charts/CashFlowTrendChart';
+import { CashFlowStreamVisualizer } from './charts/CashFlowStreamVisualizer';
 import { CategoryIcon } from './CategoryIcon';
 import {
   PieChart,
@@ -60,27 +61,29 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
   return (
     <div className="space-y-8">
       {/* Top Banner / Metrics Overview */}
-      <div className="p-6 rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-6 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-white shadow-xs relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2">
-              <PieChart className="w-5 h-5 text-slate-800" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-300 flex items-center justify-center shadow-xs">
+                <PieChart className="w-5 h-5" />
+              </div>
               <h2 className="text-lg font-bold text-slate-900">
                 Visual Financial Tracking & Analytics
               </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-              Color-coded category charts, variance diagnostics against default budgets, and daily velocity tracking.
+            <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+              Color-coded category charts, variance diagnostics against default budgets, and daily velocity tracking calibrated by NirviAura Publishing and Learning Studio.
             </p>
           </div>
 
-          <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+          <div className="flex items-center gap-4 bg-white/90 backdrop-blur-xs p-3 rounded-xl border border-slate-200/90 text-xs shadow-2xs">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">
-                Cash Flow
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">
+                Net Cash Flow
               </span>
               <span
-                className={`font-mono tabular-nums font-bold ${
+                className={`font-mono tabular-nums font-bold text-sm ${
                   netSavings >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
@@ -88,18 +91,28 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
                 {formatCurrency(netSavings, currencySymbol)}
               </span>
             </div>
-            <div className="h-6 w-px bg-slate-200" />
+            <div className="h-8 w-px bg-slate-200" />
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">
                 Savings Rate
               </span>
-              <span className="font-mono tabular-nums font-bold text-slate-900">
+              <span className="font-mono tabular-nums font-bold text-sm text-slate-900">
                 {savingsRate.toFixed(1)}%
               </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Cashflow Stream Waterfall */}
+      <CashFlowStreamVisualizer
+        totalIncome={totalIncome}
+        totalExpense={totalExpense}
+        netSavings={netSavings}
+        savingsRate={savingsRate}
+        currencySymbol={currencySymbol}
+        summaries={summaries}
+      />
 
       {/* Chart Block 1: Color-Coded Donut Chart & Category Breakdown Table */}
       <div className="p-5 sm:p-6 rounded-xl border border-slate-200 bg-white">
@@ -265,15 +278,15 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           {/* Insight 1: Dominant Category */}
-          <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50">
-            <span className="font-semibold text-slate-900 block mb-1">
+          <div className="p-4 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-white shadow-2xs">
+            <span className="font-bold text-amber-950 block mb-1 uppercase tracking-wider text-[11px]">
               Top Expense Driver
             </span>
-            <p className="text-slate-600 leading-relaxed">
+            <p className="text-slate-700 leading-relaxed">
               {highestCategory ? (
                 <>
                   <strong className="text-slate-900">{highestCategory.category.name}</strong> accounts for{' '}
-                  <strong className="font-mono">{((highestCategory.spent / totalExpense) * 100).toFixed(1)}%</strong>{' '}
+                  <strong className="font-mono text-amber-800">{((highestCategory.spent / totalExpense) * 100).toFixed(1)}%</strong>{' '}
                   of all monthly expenses ({formatCurrency(highestCategory.spent, currencySymbol)}).
                 </>
               ) : (
@@ -283,11 +296,21 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           </div>
 
           {/* Insight 2: Over Budget Alerts */}
-          <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50">
-            <span className="font-semibold text-slate-900 block mb-1">
+          <div
+            className={`p-4 rounded-xl border shadow-2xs ${
+              overBudgetCategories.length > 0
+                ? 'border-rose-200 bg-gradient-to-br from-rose-50/70 to-white'
+                : 'border-emerald-200 bg-gradient-to-br from-emerald-50/70 to-white'
+            }`}
+          >
+            <span
+              className={`font-bold block mb-1 uppercase tracking-wider text-[11px] ${
+                overBudgetCategories.length > 0 ? 'text-rose-950' : 'text-emerald-950'
+              }`}
+            >
               Budget Compliance
             </span>
-            <p className="text-slate-600 leading-relaxed">
+            <p className="text-slate-700 leading-relaxed">
               {overBudgetCategories.length > 0 ? (
                 <span className="text-rose-700">
                   <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-rose-500" />
@@ -303,12 +326,12 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
           </div>
 
           {/* Insight 3: Net Savings Velocity */}
-          <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50">
-            <span className="font-semibold text-slate-900 block mb-1">
+          <div className="p-4 rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-white shadow-2xs">
+            <span className="font-bold text-indigo-950 block mb-1 uppercase tracking-wider text-[11px]">
               Capital Retention Rate
             </span>
-            <p className="text-slate-600 leading-relaxed">
-              You are retaining <strong className="font-mono text-slate-900">{savingsRate.toFixed(1)}%</strong> of gross monthly income as net savings. Financial advisors recommend retaining at least 20% for emergency reserves and long-term wealth.
+            <p className="text-slate-700 leading-relaxed">
+              You are retaining <strong className="font-mono text-indigo-700 font-bold">{savingsRate.toFixed(1)}%</strong> of gross monthly income as net savings. Recommended standard is at least 20% for emergency reserves and compound wealth growth.
             </p>
           </div>
         </div>

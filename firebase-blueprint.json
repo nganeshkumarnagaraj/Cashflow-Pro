@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial income or expense transaction record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 150,
+          "minLength": 1
+        },
+        "amount": {
+          "type": "number"
+        },
+        "categoryId": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "paymentMethod": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "userId", "type", "title", "amount", "categoryId", "date", "paymentMethod", "createdAt"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User custom category budgets and active currency preferences",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "currencyCode": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "categoryBudgets": {
+          "type": "object"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["userId", "currencyCode", "categoryBudgets", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata document",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["uid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/Transaction"
+      },
+      "description": "Collection of individual income and expense transactions for a specific user"
+    },
+    "/users/{userId}/settings/preferences": {
+      "schema": {
+        "$ref": "#/entities/UserSettings"
+      },
+      "description": "User customized category monthly limits and preferred currency"
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "User profile information"
+    }
+  }
+}

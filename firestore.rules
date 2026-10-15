@@ -1,0 +1,97 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'createdAt']) &&
+             data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+             data.uid == userId &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2048)) &&
+             data.createdAt is number;
+    }
+
+    function isValidTransaction(data, userId) {
+      return data.keys().hasAll(['id', 'userId', 'type', 'title', 'amount', 'categoryId', 'date', 'paymentMethod', 'createdAt']) &&
+             data.keys().hasOnly(['id', 'userId', 'type', 'title', 'amount', 'categoryId', 'date', 'paymentMethod', 'notes', 'createdAt']) &&
+             data.id is string && isValidId(data.id) &&
+             data.userId == userId &&
+             (data.type == 'income' || data.type == 'expense') &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+             data.amount is number && data.amount > 0 &&
+             data.categoryId is string && data.categoryId.size() <= 50 &&
+             data.date is string && data.date.size() <= 20 &&
+             data.paymentMethod is string && data.paymentMethod.size() <= 50 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             data.createdAt is number;
+    }
+
+    function isValidUserSettings(data, userId) {
+      return data.keys().hasAll(['userId', 'currencyCode', 'categoryBudgets', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'currencyCode', 'categoryBudgets', 'updatedAt']) &&
+             data.userId == userId &&
+             data.currencyCode is string && data.currencyCode.size() <= 10 &&
+             data.categoryBudgets is map &&
+             data.updatedAt is number;
+    }
+
+    // User profile documents
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId) &&
+                       incoming().uid == existing().uid &&
+                       (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // User transactions collection
+      match /transactions/{transactionId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+        allow list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(transactionId) && isValidTransaction(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(transactionId) && isValidTransaction(incoming(), userId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+      }
+
+      // User settings / budget preferences
+      match /settings/{settingId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(settingId);
+        allow list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(settingId) && isValidUserSettings(incoming(), userId);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(settingId);
+      }
+    }
+  }
+}

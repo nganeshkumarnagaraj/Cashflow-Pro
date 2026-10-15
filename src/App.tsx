@@ -26,7 +26,15 @@ import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { TransactionModal } from './components/TransactionModal';
 import { BudgetModal } from './components/BudgetModal';
 import { StudioAttributionModal } from './components/StudioAttributionModal';
-import { Calendar, DollarSign, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { Calendar, RotateCcw, Check, Cloud, CloudUpload } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import {
+  subscribeUserTransactions,
+  saveTransactionToFirestore,
+  deleteTransactionFromFirestore,
+  loadUserSettingsFromFirestore,
+  saveUserSettingsToFirestore,
+} from './lib/firestoreService';
 
 const STORAGE_KEYS = {
   TRANSACTIONS: 'iem_transactions_v1',
@@ -34,8 +42,10 @@ const STORAGE_KEYS = {
   CURRENCY: 'iem_currency_v1',
 };
 
-export default function App() {
-  // 1. Transactions state with localStorage persistence
+function CashflowApp() {
+  const { currentUser, loading: authLoading } = useAuth();
+
+  // 1. Transactions state with localStorage fallback
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
@@ -83,35 +93,9 @@ export default function App() {
   const [budgetModalCategory, setBudgetModalCategory] = useState<Category | null>(null);
   const [isStudioModalOpen, setIsStudioModalOpen] = useState(false);
 
-  // 7. Notification toast
+  // 7. Notification toast & Cloud migration prompt
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Synchronize with localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-    } catch (e) {
-      console.error('Failed to save transactions', e);
-    }
-  }, [transactions]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(categoryBudgets));
-    } catch (e) {
-      console.error('Failed to save budgets', e);
-    }
-  }, [categoryBudgets]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CURRENCY, currencyCode);
-    } catch (e) {
-      console.error('Failed to save currency', e);
-    }
-  }, [currencyCode]);
-
-  const activeCurrency = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
+  const [cloudSyncPrompt, setCloudSyncPrompt] = useState<boolean>(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -119,6 +103,85 @@ export default function App() {
       setToastMessage(null);
     }, 3000);
   };
+
+  // Synchronize local storage (cache for offline resilience)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    } catch (e) {
+      console.error('Failed to save transactions locally', e);
+    }
+  }, [transactions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(categoryBudgets));
+    } catch (e) {
+      console.error('Failed to save budgets locally', e);
+    }
+  }, [categoryBudgets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.CURRENCY, currencyCode);
+    } catch (e) {
+      console.error('Failed to save currency locally', e);
+    }
+  }, [currencyCode]);
+
+  // Real-time Firestore sync when authenticated
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // 1. Load user settings from Firestore (category budgets & currency)
+    loadUserSettingsFromFirestore(currentUser.uid).then((settings) => {
+      if (settings) {
+        if (settings.categoryBudgets) {
+          setCategoryBudgets(settings.categoryBudgets);
+        }
+        if (settings.currencyCode) {
+          setCurrencyCode(settings.currencyCode);
+        }
+      }
+    });
+
+    // 2. Subscribe to real-time transactions
+    const unsubscribe = subscribeUserTransactions(
+      currentUser.uid,
+      (cloudTxs) => {
+        if (cloudTxs.length > 0) {
+          setTransactions(cloudTxs);
+          setCloudSyncPrompt(false);
+        } else if (transactions.length > 0) {
+          // Cloud is empty but local has items -> prompt to upload
+          setCloudSyncPrompt(true);
+        }
+      },
+      (error) => {
+        console.warn('Real-time sync error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Upload local transactions to Firestore on user confirmation
+  const handleMigrateLocalToCloud = async () => {
+    if (!currentUser) return;
+    try {
+      for (const tx of transactions) {
+        await saveTransactionToFirestore(currentUser.uid, tx);
+      }
+      await saveUserSettingsToFirestore(currentUser.uid, categoryBudgets, currencyCode);
+      setCloudSyncPrompt(false);
+      showToast('Existing transactions synced to your Firestore database');
+    } catch (e) {
+      console.error('Cloud migration error:', e);
+      showToast('Could not complete cloud migration');
+    }
+  };
+
+  const activeCurrency = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
 
   // Calculations
   const expenseCategories = DEFAULT_EXPENSE_CATEGORIES;
@@ -141,7 +204,7 @@ export default function App() {
   // Available months from transactions
   const availableMonths = React.useMemo(() => {
     const set = new Set<string>();
-    // Always include current month
+    // Current month
     set.add('2026-10');
     transactions.forEach((t) => {
       if (t.date && t.date.length >= 7) {
@@ -152,42 +215,57 @@ export default function App() {
   }, [transactions]);
 
   // Transaction CRUD handlers
-  const handleSaveTransaction = (
+  const handleSaveTransaction = async (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
+    const txToSave: Transaction = {
+      ...txData,
+      id: existingId || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: existingId
+        ? transactions.find((t) => t.id === existingId)?.createdAt || Date.now()
+        : Date.now(),
+    };
+
+    // Optimistic local update
     if (existingId) {
       setTransactions((prev) =>
-        prev.map((t) =>
-          t.id === existingId
-            ? {
-                ...t,
-                ...txData,
-              }
-            : t
-        )
+        prev.map((t) => (t.id === existingId ? txToSave : t))
       );
-      showToast('Transaction successfully updated');
     } else {
-      const newTx: Transaction = {
-        ...txData,
-        id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        createdAt: Date.now(),
-      };
-      setTransactions((prev) => [newTx, ...prev]);
-      showToast('Transaction recorded successfully');
+      setTransactions((prev) => [txToSave, ...prev]);
     }
+
+    // Cloud sync if authenticated
+    if (currentUser) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, txToSave);
+      } catch (e) {
+        console.error('Error saving transaction to Firestore:', e);
+        showToast('Saved locally (cloud sync offline)');
+        return;
+      }
+    }
+
+    showToast(existingId ? 'Transaction successfully updated' : 'Transaction recorded successfully');
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
+    if (currentUser) {
+      try {
+        await deleteTransactionFromFirestore(currentUser.uid, id);
+      } catch (e) {
+        console.error('Error deleting transaction from Firestore:', e);
+      }
+    }
     showToast('Transaction deleted');
   };
 
-  const handleApplyPreset = (preset: QuickPreset) => {
+  const handleApplyPreset = async (preset: QuickPreset) => {
     const today = new Date().toISOString().slice(0, 10);
     const newTx: Transaction = {
-      id: `tx-preset-${Date.now()}`,
+      id: `tx-preset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type: preset.type,
       title: preset.title,
       amount: preset.amount,
@@ -196,36 +274,86 @@ export default function App() {
       paymentMethod: preset.paymentMethod,
       createdAt: Date.now(),
     };
+
     setTransactions((prev) => [newTx, ...prev]);
+
+    if (currentUser) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, newTx);
+      } catch (e) {
+        console.error('Error syncing preset transaction:', e);
+      }
+    }
+
     showToast(`Quick recorded: ${preset.title} (+${activeCurrency.symbol}${preset.amount})`);
   };
 
   // Budget Limit handlers
-  const handleSaveBudgetLimit = (categoryId: string, newLimit: number) => {
-    setCategoryBudgets((prev) => ({
-      ...prev,
+  const handleSaveBudgetLimit = async (categoryId: string, newLimit: number) => {
+    const updated = {
+      ...categoryBudgets,
       [categoryId]: newLimit,
-    }));
+    };
+    setCategoryBudgets(updated);
+
+    if (currentUser) {
+      try {
+        await saveUserSettingsToFirestore(currentUser.uid, updated, currencyCode);
+      } catch (e) {
+        console.error('Error syncing budget to Firestore:', e);
+      }
+    }
     showToast('Category budget limit adjusted');
   };
 
-  const handleResetAllBudgets = () => {
+  const handleResetAllBudgets = async () => {
     const defaultsMap: Record<string, number> = {};
     DEFAULT_EXPENSE_CATEGORIES.forEach((cat) => {
       defaultsMap[cat.id] = cat.defaultMonthlyBudget;
     });
     setCategoryBudgets(defaultsMap);
+
+    if (currentUser) {
+      try {
+        await saveUserSettingsToFirestore(currentUser.uid, defaultsMap, currencyCode);
+      } catch (e) {
+        console.error('Error resetting budgets in Firestore:', e);
+      }
+    }
     showToast('All category budgets reset to defaults');
   };
 
-  const handleResetSampleData = () => {
+  const handleResetSampleData = async () => {
     setTransactions(INITIAL_SAMPLE_TRANSACTIONS);
     const defaultsMap: Record<string, number> = {};
     DEFAULT_EXPENSE_CATEGORIES.forEach((cat) => {
       defaultsMap[cat.id] = cat.defaultMonthlyBudget;
     });
     setCategoryBudgets(defaultsMap);
+
+    if (currentUser) {
+      try {
+        // Upload initial sample transactions to Firestore
+        for (const tx of INITIAL_SAMPLE_TRANSACTIONS) {
+          await saveTransactionToFirestore(currentUser.uid, tx);
+        }
+        await saveUserSettingsToFirestore(currentUser.uid, defaultsMap, currencyCode);
+      } catch (e) {
+        console.error('Error resetting sample data in Firestore:', e);
+      }
+    }
     showToast('Sample financial data & default budgets restored');
+  };
+
+  const handleCurrencyChange = async (newCode: string) => {
+    setCurrencyCode(newCode);
+    if (currentUser) {
+      try {
+        await saveUserSettingsToFirestore(currentUser.uid, categoryBudgets, newCode);
+      } catch (e) {
+        console.error('Error syncing currency to Firestore:', e);
+      }
+    }
   };
 
   return (
@@ -241,6 +369,35 @@ export default function App() {
         onOpenStudioModal={() => setIsStudioModalOpen(true)}
       />
 
+      {/* Cloud Migration Notification Banner if authenticated and cloud empty */}
+      {cloudSyncPrompt && currentUser && (
+        <div className="bg-indigo-50 border-b border-indigo-100 text-indigo-900 px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>
+                <strong>Connected to Cloud Firestore:</strong> You have {transactions.length} local records ready to sync with your account (<strong>{currentUser.email}</strong>).
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleMigrateLocalToCloud}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-md shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <CloudUpload className="w-3.5 h-3.5" />
+                <span>Sync to Cloud Now</span>
+              </button>
+              <button
+                onClick={() => setCloudSyncPrompt(false)}
+                className="px-2 py-1 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. Global Context Bar: Month Filter + Currency Selector + Reset Action */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -249,7 +406,7 @@ export default function App() {
             <span className="text-slate-400 flex items-center gap-1 font-medium">
               <Calendar className="w-3.5 h-3.5" /> Period:
             </span>
-            <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg">
+            <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg overflow-x-auto">
               {availableMonths.map((m) => (
                 <button
                   key={m}
@@ -282,7 +439,7 @@ export default function App() {
               <span className="text-slate-400">Currency:</span>
               <select
                 value={currencyCode}
-                onChange={(e) => setCurrencyCode(e.target.value)}
+                onChange={(e) => handleCurrencyChange(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-800 font-semibold focus:outline-hidden focus:border-slate-800 cursor-pointer"
               >
                 {CURRENCIES.map((c) => (
@@ -434,7 +591,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 6. Clean Footer with Studio Attribution */}
+      {/* 6. Clean Footer with Studio Attribution & Firebase Sync Status */}
       <footer className="border-t border-slate-200 bg-white py-8 mt-12 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -467,10 +624,18 @@ export default function App() {
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
             <span>© 2026 NirviAura Publishing and Learning Studio. All rights reserved.</span>
-            <span>Client-side local storage · Instant CSV export · High-clarity financial tracking</span>
+            <span>Firebase Firestore Cloud Sync enabled · Private & secure client-side storage</span>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <CashflowApp />
+    </AuthProvider>
   );
 }

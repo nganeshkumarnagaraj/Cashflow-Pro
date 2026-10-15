@@ -113,10 +113,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Controls Card */}
-      <div className="p-4 sm:p-5 rounded-xl border border-slate-200 bg-white space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/90 bg-white shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
+            <h2 className="text-base font-bold text-slate-900">
               Transactions Ledger
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -127,7 +127,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleExportCsv}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-2xs"
               title="Download CSV spreadsheet"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
@@ -140,6 +140,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <Plus className="w-3.5 h-3.5" />
               Add Record
             </button>
+          </div>
+        </div>
+
+        {/* Real-time In-View Financial Rollup Mini-Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+          <div className="px-3.5 py-2 rounded-xl bg-emerald-50/70 border border-emerald-100 flex items-center justify-between text-xs">
+            <span className="text-emerald-900 font-semibold">Inflow in view:</span>
+            <span className="font-mono font-bold text-emerald-700 tabular-nums">
+              +{formatCurrency(totalFilteredIncome, currencySymbol)}
+            </span>
+          </div>
+
+          <div className="px-3.5 py-2 rounded-xl bg-rose-50/70 border border-rose-100 flex items-center justify-between text-xs">
+            <span className="text-rose-900 font-semibold">Outflow in view:</span>
+            <span className="font-mono font-bold text-rose-700 tabular-nums">
+              -{formatCurrency(totalFilteredExpense, currencySymbol)}
+            </span>
+          </div>
+
+          <div className="px-3.5 py-2 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between text-xs">
+            <span className="text-indigo-900 font-semibold">Net in view:</span>
+            <span className={`font-mono font-bold tabular-nums ${totalFilteredIncome - totalFilteredExpense >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+              {totalFilteredIncome - totalFilteredExpense >= 0 ? '+' : ''}
+              {formatCurrency(totalFilteredIncome - totalFilteredExpense, currencySymbol)}
+            </span>
           </div>
         </div>
 
@@ -306,16 +331,32 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         )}
                       </td>
 
-                      {/* Payment Method */}
-                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                        <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                      {/* Payment Method with Visual Color Pill */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span
+                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${
+                            tx.paymentMethod === 'Cash'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              : tx.paymentMethod === 'Bank Transfer'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                              : tx.paymentMethod.includes('Wallet') || tx.paymentMethod.includes('Pay')
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-blue-50 text-blue-700 border border-blue-100'
+                          }`}
+                        >
                           {tx.paymentMethod}
                         </span>
                       </td>
 
-                      {/* Amount */}
+                      {/* Amount with Vibrant Pill */}
                       <td className="py-3 px-4 text-right font-mono tabular-nums font-bold whitespace-nowrap text-sm">
-                        <span className={isExpense ? 'text-rose-600' : 'text-emerald-600'}>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg inline-block font-mono ${
+                            isExpense
+                              ? 'text-rose-700 bg-rose-50 border border-rose-100'
+                              : 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                          }`}
+                        >
                           {isExpense ? '-' : '+'}
                           {formatCurrency(tx.amount, currencySymbol)}
                         </span>

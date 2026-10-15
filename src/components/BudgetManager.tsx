@@ -84,35 +84,35 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
           </div>
         </div>
 
-        {/* Global Summary Stats */}
+        {/* Global Summary Stats with Vibrant Color Coding */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+          <div className="p-4 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-900 block">
               Cumulative Expense Cap
             </span>
             <span className="text-2xl font-bold font-mono tabular-nums text-slate-900 block mt-1">
               {formatCurrency(totalBudget, currencySymbol)}
             </span>
-            <span className="text-xs text-slate-500 mt-0.5 block">
+            <span className="text-xs text-slate-500 mt-1 block">
               Sum of {expenseCategories.length} category caps
             </span>
           </div>
 
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+          <div className="p-4 rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50/60 to-white">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-900 block">
               Current Month Spent
             </span>
             <span className="text-2xl font-bold font-mono tabular-nums text-slate-900 block mt-1">
               {formatCurrency(totalExpense, currencySymbol)}
             </span>
-            <span className="text-xs text-slate-500 mt-0.5 block font-mono tabular-nums">
-              {totalBudget > 0 ? ((totalExpense / totalBudget) * 100).toFixed(1) : 0}% of allocation
+            <span className="text-xs text-slate-500 mt-1 block font-mono tabular-nums">
+              {totalBudget > 0 ? ((totalExpense / totalBudget) * 100).toFixed(1) : 0}% of allocation consumed
             </span>
           </div>
 
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
-              Unallocated Room
+          <div className="p-4 rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50/60 to-white">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 block">
+              Unallocated Safety Room
             </span>
             <span
               className={`text-2xl font-bold font-mono tabular-nums block mt-1 ${
@@ -123,7 +123,7 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
                 ? `-${formatCurrency(Math.abs(totalBudget - totalExpense), currencySymbol)}`
                 : formatCurrency(totalBudget - totalExpense, currencySymbol)}
             </span>
-            <span className="text-xs text-slate-500 mt-0.5 block">
+            <span className="text-xs text-slate-500 mt-1 block">
               {totalBudget - totalExpense < 0 ? 'Exceeding budget limit' : 'Safe buffer balance'}
             </span>
           </div>
@@ -223,21 +223,23 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
           {summaries.map((summary) => {
             const { category, budget, spent, remaining, percentUsed, status, transactionCount } = summary;
             const isOverBudget = status === 'exceeded';
+            const isWarning = status === 'warning';
             const isDefault = budget === category.defaultMonthlyBudget;
+            const cappedPercent = Math.min(percentUsed, 100);
 
             return (
               <div
                 key={category.id}
-                className="p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex flex-col justify-between"
+                className="p-5 rounded-2xl border border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-xs transition-all duration-200 flex flex-col justify-between group"
               >
                 <div>
                   {/* Top Bar with Icon & Edit Button */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-2xs"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform"
                         style={{
-                          backgroundColor: `${category.color}15`,
+                          backgroundColor: `${category.color}20`,
                           color: category.color,
                         }}
                       >
@@ -249,7 +251,7 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
                             {category.name}
                           </h4>
                           <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
                             style={{ backgroundColor: category.color }}
                             title={`Category theme color: ${category.color}`}
                           />
@@ -262,7 +264,7 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
 
                     <button
                       onClick={() => onEditBudget(category)}
-                      className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-md transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                      className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
                     >
                       <Sliders className="w-3 h-3 text-slate-500" />
                       Edit Limit
@@ -272,19 +274,19 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
                   {/* Amounts row */}
                   <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-100 text-xs">
                     <div>
-                      <span className="text-slate-400 block text-[11px]">Monthly Limit</span>
+                      <span className="text-slate-400 block text-[11px] font-medium">Monthly Cap</span>
                       <span className="font-mono tabular-nums font-bold text-slate-900 text-sm">
                         {formatCurrency(budget, currencySymbol)}
                       </span>
                       {!isDefault && (
-                        <span className="text-[10px] text-blue-600 block mt-0.5">
+                        <span className="text-[10px] text-indigo-600 font-semibold block mt-0.5">
                           Customized
                         </span>
                       )}
                     </div>
 
                     <div>
-                      <span className="text-slate-400 block text-[11px]">Spent so far</span>
+                      <span className="text-slate-400 block text-[11px] font-medium">Spent so far</span>
                       <span className="font-mono tabular-nums font-bold text-slate-900 text-sm">
                         {formatCurrency(spent, currencySymbol)}
                       </span>
@@ -294,7 +296,7 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
                     </div>
 
                     <div>
-                      <span className="text-slate-400 block text-[11px]">Balance</span>
+                      <span className="text-slate-400 block text-[11px] font-medium">Remaining</span>
                       <span
                         className={`font-mono tabular-nums font-bold text-sm block ${
                           isOverBudget ? 'text-rose-600' : 'text-emerald-600'
@@ -305,24 +307,30 @@ export const BudgetManager: React.FC<BudgetManagerProps> = ({
                           : formatCurrency(remaining, currencySymbol)}
                       </span>
                       <span
-                        className={`text-[10px] font-semibold block mt-0.5 ${
-                          isOverBudget ? 'text-rose-600' : 'text-emerald-600'
+                        className={`text-[10px] font-bold block mt-0.5 ${
+                          isOverBudget
+                            ? 'text-rose-600'
+                            : isWarning
+                            ? 'text-amber-600'
+                            : 'text-emerald-600'
                         }`}
                       >
-                        {isOverBudget ? 'Over Budget' : 'Within Budget'}
+                        {isOverBudget ? 'Over Cap' : isWarning ? 'Warning 85%+' : 'Within Limit'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Visual Bar */}
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mt-3 relative">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(percentUsed, 100)}%`,
-                        backgroundColor: isOverBudget ? '#E11D48' : category.color,
-                      }}
-                    />
+                  {/* Visual Progress Bar with Thresholds */}
+                  <div className="relative mt-3.5 mb-1.5">
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden shadow-inner">
+                      <div
+                        className="h-full rounded-full transition-all duration-500 ease-out"
+                        style={{
+                          width: `${cappedPercent}%`,
+                          backgroundColor: isOverBudget ? '#E11D48' : isWarning ? '#F59E0B' : category.color,
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

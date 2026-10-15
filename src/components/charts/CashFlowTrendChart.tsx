@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Transaction, Category } from '../../types/finance';
 import { formatCurrency, formatShortDate } from '../../utils/formatters';
+import { CategoryIcon } from '../CategoryIcon';
+import { CreditCard, Wallet, Landmark, Smartphone, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 
 interface CashFlowTrendChartProps {
   transactions: Transaction[];
@@ -24,7 +26,7 @@ export const CashFlowTrendChart: React.FC<CashFlowTrendChartProps> = ({
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
-  // Filter transactions for selected month or last 30 days
+  // Filter transactions for selected month or all
   const filtered = transactions.filter((t) => {
     if (selectedMonth === 'all') return true;
     return t.date.startsWith(selectedMonth);
@@ -46,7 +48,7 @@ export const CashFlowTrendChart: React.FC<CashFlowTrendChartProps> = ({
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  const maxExpense = Math.max(...sortedDays.map((d) => d.expense), 100);
+  const maxExpense = Math.max(...sortedDays.map((d) => Math.max(d.expense, d.income)), 100);
 
   // Payment method breakdown
   const paymentMethods: Record<string, number> = {};
@@ -60,116 +62,186 @@ export const CashFlowTrendChart: React.FC<CashFlowTrendChartProps> = ({
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  if (sortedDays.length === 0) {
-    return (
-      <div className="py-8 text-center text-slate-500 text-sm">
-        No transaction activity recorded for this period.
-      </div>
-    );
-  }
+  const totalIncome = filtered
+    .filter((t) => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const getPaymentIcon = (method: string) => {
+    switch (method.toLowerCase()) {
+      case 'credit card':
+      case 'debit card':
+        return <CreditCard className="w-3.5 h-3.5 text-blue-500" />;
+      case 'cash':
+        return <Wallet className="w-3.5 h-3.5 text-emerald-500" />;
+      case 'bank transfer':
+        return <Landmark className="w-3.5 h-3.5 text-purple-500" />;
+      case 'digital wallet':
+      case 'apple pay':
+      case 'google pay':
+        return <Smartphone className="w-3.5 h-3.5 text-amber-500" />;
+      default:
+        return <CreditCard className="w-3.5 h-3.5 text-slate-500" />;
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Daily Expense Distribution Bars */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
+      {/* Daily Cash Velocity Timeline */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Daily Expense Velocity
-            </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Hover over bars to inspect daily spending
-            </p>
-          </div>
-          {hoveredDay && (
-            <div className="text-right">
-              <span className="text-xs text-slate-500">{formatShortDate(hoveredDay.date)}: </span>
-              <span className="text-xs font-bold text-slate-900 font-mono tabular-nums">
-                {formatCurrency(hoveredDay.expense, currencySymbol)}
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">
+                Daily Cash Velocity & Outflow Waves
+              </h3>
+              <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                Timeline
               </span>
             </div>
-          )}
+            <p className="text-xs text-slate-500 mt-0.5">
+              Hover over any daily bar to inspect specific itemized transactions
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs font-semibold">
+            <div className="flex items-center gap-1.5 text-emerald-600">
+              <span className="w-3 h-3 rounded-sm bg-gradient-to-t from-emerald-600 to-emerald-400" />
+              <span>Income</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-rose-600">
+              <span className="w-3 h-3 rounded-sm bg-gradient-to-t from-rose-600 to-rose-400" />
+              <span>Expense</span>
+            </div>
+          </div>
         </div>
 
-        {/* Visual Bar Strip */}
-        <div className="h-44 flex items-end gap-1.5 pt-4 pb-2 border-b border-slate-200">
-          {sortedDays.map((day) => {
-            const heightPercent = Math.max((day.expense / maxExpense) * 100, 4);
-            const isHovered = hoveredDay?.date === day.date;
+        {sortedDays.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 text-xs">
+            No activity recorded for this period.
+          </div>
+        ) : (
+          <div>
+            {/* Interactive Histogram Bars with Gradient Fills */}
+            <div className="h-48 flex items-end gap-1.5 sm:gap-2.5 pt-6 pb-2 px-1 overflow-x-auto">
+              {sortedDays.map((day) => {
+                const expenseHeight = Math.max((day.expense / maxExpense) * 100, day.expense > 0 ? 8 : 0);
+                const incomeHeight = Math.max((day.income / maxExpense) * 100, day.income > 0 ? 8 : 0);
+                const isHovered = hoveredDay?.date === day.date;
 
-            return (
-              <div
-                key={day.date}
-                className="flex-1 flex flex-col items-center h-full justify-end relative group cursor-pointer"
-                onMouseEnter={() => setHoveredDay(day)}
-                onMouseLeave={() => setHoveredDay(null)}
-              >
-                {/* Popover on hover */}
-                {isHovered && (
-                  <div className="absolute bottom-full mb-2 z-20 bg-slate-900 text-white text-xs rounded-md px-2.5 py-1.5 shadow-lg whitespace-nowrap pointer-events-none transform -translate-x-1/2 left-1/2">
-                    <div className="font-semibold">{formatShortDate(day.date)}</div>
-                    <div className="font-mono tabular-nums text-rose-300">
-                      Spent: {formatCurrency(day.expense, currencySymbol)}
-                    </div>
+                return (
+                  <div
+                    key={day.date}
+                    className="flex-1 min-w-[20px] max-w-[48px] h-full flex items-end justify-center gap-1 group cursor-pointer relative"
+                    onMouseEnter={() => setHoveredDay(day)}
+                    onMouseLeave={() => setHoveredDay(null)}
+                  >
+                    {/* Income Bar (Green Gradient) */}
                     {day.income > 0 && (
-                      <div className="font-mono tabular-nums text-emerald-300">
-                        Income: +{formatCurrency(day.income, currencySymbol)}
-                      </div>
+                      <div
+                        className={`w-full rounded-t-md bg-gradient-to-t from-emerald-600 to-emerald-400 transition-all duration-200 ${
+                          isHovered ? 'brightness-110 shadow-md' : 'opacity-85'
+                        }`}
+                        style={{ height: `${incomeHeight}%` }}
+                      />
                     )}
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {day.items.length} records
+
+                    {/* Expense Bar (Rose Gradient) */}
+                    {day.expense > 0 && (
+                      <div
+                        className={`w-full rounded-t-md bg-gradient-to-t from-rose-600 to-rose-400 transition-all duration-200 ${
+                          isHovered ? 'brightness-110 shadow-md' : 'opacity-85'
+                        }`}
+                        style={{ height: `${expenseHeight}%` }}
+                      />
+                    )}
+
+                    {/* Floating Date Label */}
+                    <div className="absolute -bottom-5 text-[10px] text-slate-400 font-mono whitespace-nowrap opacity-60 group-hover:opacity-100 transition-opacity">
+                      {formatShortDate(day.date)}
                     </div>
                   </div>
-                )}
+                );
+              })}
+            </div>
 
-                {/* Bar */}
-                <div
-                  className={`w-full rounded-t-sm transition-all duration-200 ${
-                    isHovered
-                      ? 'bg-rose-600 shadow-sm'
-                      : day.expense > 150
-                      ? 'bg-rose-400'
-                      : 'bg-slate-700 hover:bg-slate-900'
-                  }`}
-                  style={{ height: `${heightPercent}%` }}
-                />
+            {/* Hover Data Inspection Card */}
+            {hoveredDay && (
+              <div className="mt-6 p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between gap-4 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-slate-900 font-mono">
+                      {hoveredDay.date}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      ({hoveredDay.items.length} {hoveredDay.items.length === 1 ? 'entry' : 'entries'})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-mono font-bold">
+                    {hoveredDay.income > 0 && (
+                      <span className="text-emerald-600">
+                        +{formatCurrency(hoveredDay.income, currencySymbol)}
+                      </span>
+                    )}
+                    {hoveredDay.expense > 0 && (
+                      <span className="text-rose-600">
+                        -{formatCurrency(hoveredDay.expense, currencySymbol)}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                <span className="text-[10px] text-slate-400 font-mono mt-1 select-none">
-                  {day.date.split('-')[2]}
-                </span>
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-indigo-100">
+                  {hoveredDay.items.map((item) => {
+                    const cat = categoryMap.get(item.categoryId);
+                    return (
+                      <span
+                        key={item.id}
+                        className="px-2 py-1 bg-white rounded-lg border border-slate-200 text-xs flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: cat?.color || '#94a3b8' }}
+                        />
+                        <span className="font-medium text-slate-800">{item.title}:</span>
+                        <span className={`font-mono font-bold ${item.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount, currencySymbol)}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Payment Channels Breakdown */}
-      <div>
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-          Spending by Payment Method
+      {/* Payment Channel Allocation Strips */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xs">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+          Outflow by Payment Channel
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {Object.entries(paymentMethods).map(([method, amount]) => {
-            const pct = totalExpense > 0 ? (amount / totalExpense) * 100 : 0;
+            const pct = totalExpense > 0 ? ((amount / totalExpense) * 100).toFixed(1) : 0;
             return (
-              <div
-                key={method}
-                className="p-2.5 rounded-lg border border-slate-200 bg-white flex flex-col justify-between"
-              >
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-medium text-slate-700">{method}</span>
-                  <span className="font-mono tabular-nums font-bold text-slate-900">
-                    {formatCurrency(amount, currencySymbol)}
-                  </span>
+              <div key={method} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <div className="flex items-center gap-2 font-semibold text-slate-800">
+                    {getPaymentIcon(method)}
+                    <span>{method}</span>
+                  </div>
+                  <span className="font-mono text-slate-500 font-bold">{pct}%</span>
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mb-2">
                   <div
-                    className="bg-slate-800 h-full rounded-full transition-all duration-300"
+                    className="bg-indigo-600 h-full rounded-full"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="text-[10px] text-slate-400 text-right font-mono mt-1">
-                  {pct.toFixed(1)}% of expenses
+                <div className="font-mono font-bold text-slate-900 text-sm">
+                  {formatCurrency(amount, currencySymbol)}
                 </div>
               </div>
             );
