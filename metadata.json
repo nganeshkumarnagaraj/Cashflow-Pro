@@ -1,0 +1,8 @@
+{
+  "name": "Cashflow Pro",
+  "description": "Smart personal budget and expense tracking dashboard developed by NirviAura Publishing and Learning Studio with default category budgets, real-time variance monitoring, and color-coded visual charts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
